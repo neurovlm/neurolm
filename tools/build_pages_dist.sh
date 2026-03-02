@@ -28,6 +28,14 @@ required_wasm_pkg_files=(
   "package.json"
 )
 
+required_site_files=(
+  "index.html"
+  "app.js"
+  "engine.js"
+  "styles.css"
+  "wasm-worker.js"
+)
+
 check_prebuilt_wasm_pkg() {
   local missing=0
   for file in "${required_wasm_pkg_files[@]}"; do
@@ -39,6 +47,21 @@ check_prebuilt_wasm_pkg() {
   if [[ "${missing}" -ne 0 ]]; then
     echo "error: prebuilt WASM assets are required. Build locally first:" >&2
     echo "       cd ${ROOT_DIR} && ./tools/build_wasm_local.sh" >&2
+    exit 1
+  fi
+}
+
+check_site_files() {
+  local missing=0
+  for file in "${required_site_files[@]}"; do
+    if [[ ! -f "${ROOT_DIR}/site/${file}" ]]; then
+      echo "error: missing required site file: ${ROOT_DIR}/site/${file}" >&2
+      missing=1
+    fi
+  done
+  if [[ "${missing}" -ne 0 ]]; then
+    echo "error: static frontend is incomplete." >&2
+    echo "       Commit site/index.html, app.js, engine.js, styles.css, wasm-worker.js before deploy." >&2
     exit 1
   fi
 }
@@ -97,6 +120,7 @@ else
     check_prebuilt_wasm_pkg
   fi
 fi
+check_site_files
 
 MODEL_BASE_URL_EFFECTIVE="$(derive_model_base_url)"
 MODEL_DIR_SRC=""
