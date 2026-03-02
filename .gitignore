@@ -1,0 +1,4 @@
+site/pkg/
+wasm/pkg/
+dist/
+model/*.gguf
