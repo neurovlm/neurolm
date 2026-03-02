@@ -11,6 +11,7 @@ DIST_DIR="${1:-${ROOT_DIR}/dist}"
 MODEL_DIR_DST="${DIST_DIR}/model"
 MODEL_FILE_NAME="${MODEL_FILE_NAME:-model-q4_k_m.gguf}"
 MODEL_URL="${MODEL_URL:-}"
+MODEL_BASE_URL="${MODEL_BASE_URL:-}"
 MODEL_SHA256="${MODEL_SHA256:-}"
 SKIP_MODEL="${SKIP_MODEL:-0}"
 SKIP_WASM_BUILD="${SKIP_WASM_BUILD:-0}"
@@ -42,6 +43,35 @@ check_prebuilt_wasm_pkg() {
   fi
 }
 
+strip_url_query_fragment() {
+  local value="$1"
+  value="${value%%\?*}"
+  value="${value%%\#*}"
+  printf '%s' "${value}"
+}
+
+derive_model_base_url() {
+  local model_url_clean
+  if [[ -n "${MODEL_BASE_URL}" ]]; then
+    printf '%s' "${MODEL_BASE_URL%/}"
+    return
+  fi
+
+  if [[ -n "${MODEL_URL}" ]]; then
+    model_url_clean="$(strip_url_query_fragment "${MODEL_URL}")"
+    printf '%s' "${model_url_clean%/*}"
+    return
+  fi
+
+  printf '%s' ""
+}
+
+download_with_retry() {
+  local src="$1"
+  local dst="$2"
+  curl --fail --location --retry 3 --retry-delay 3 "${src}" -o "${dst}"
+}
+
 if [[ "${SKIP_WASM_BUILD}" == "1" ]]; then
   echo "==> SKIP_WASM_BUILD=1 set, using prebuilt site/pkg artifacts"
   check_prebuilt_wasm_pkg
@@ -55,12 +85,19 @@ else
   fi
 fi
 
+MODEL_BASE_URL_EFFECTIVE="$(derive_model_base_url)"
+MODEL_DIR_SRC=""
 if [[ -d "${ROOT_DIR}/model" ]]; then
   MODEL_DIR_SRC="${ROOT_DIR}/model"
 elif [[ -d "${ROOT_DIR}/site/model" ]]; then
   MODEL_DIR_SRC="${ROOT_DIR}/site/model"
-else
-  echo "error: model directory not found. Expected ${ROOT_DIR}/model or ${ROOT_DIR}/site/model" >&2
+fi
+
+if [[ -z "${MODEL_DIR_SRC}" && -z "${MODEL_BASE_URL_EFFECTIVE}" && "${SKIP_MODEL}" != "1" ]]; then
+  echo "error: model files are unavailable." >&2
+  echo "       Provide one of:" >&2
+  echo "       1) local model dir (${ROOT_DIR}/model or ${ROOT_DIR}/site/model)" >&2
+  echo "       2) MODEL_URL (and optionally MODEL_BASE_URL)" >&2
   exit 1
 fi
 
@@ -79,24 +116,34 @@ touch "${DIST_DIR}/.nojekyll"
 echo "==> Copying model metadata"
 mkdir -p "${MODEL_DIR_DST}"
 for file in "${required_model_files[@]}"; do
-  if [[ ! -f "${MODEL_DIR_SRC}/${file}" ]]; then
-    echo "error: required model file missing: ${MODEL_DIR_SRC}/${file}" >&2
+  if [[ -n "${MODEL_DIR_SRC}" && -f "${MODEL_DIR_SRC}/${file}" ]]; then
+    cp "${MODEL_DIR_SRC}/${file}" "${MODEL_DIR_DST}/${file}"
+  elif [[ -n "${MODEL_BASE_URL_EFFECTIVE}" ]]; then
+    echo "==> Downloading ${file} from ${MODEL_BASE_URL_EFFECTIVE}"
+    download_with_retry "${MODEL_BASE_URL_EFFECTIVE}/${file}" "${MODEL_DIR_DST}/${file}"
+  else
+    echo "error: required model file unavailable: ${file}" >&2
+    echo "       Set MODEL_BASE_URL or include local model metadata files." >&2
     exit 1
   fi
-  cp "${MODEL_DIR_SRC}/${file}" "${MODEL_DIR_DST}/${file}"
 done
 
 if [[ "${SKIP_MODEL}" == "1" ]]; then
   echo "==> SKIP_MODEL=1 set, skipping GGUF file staging"
-elif [[ -f "${MODEL_DIR_SRC}/${MODEL_FILE_NAME}" ]]; then
+elif [[ -n "${MODEL_DIR_SRC}" && -f "${MODEL_DIR_SRC}/${MODEL_FILE_NAME}" ]]; then
   echo "==> Using local GGUF: ${MODEL_DIR_SRC}/${MODEL_FILE_NAME}"
   cp "${MODEL_DIR_SRC}/${MODEL_FILE_NAME}" "${MODEL_DIR_DST}/${MODEL_FILE_NAME}"
 elif [[ -n "${MODEL_URL}" ]]; then
   echo "==> Downloading GGUF from MODEL_URL"
-  curl --fail --location --retry 3 --retry-delay 3 "${MODEL_URL}" -o "${MODEL_DIR_DST}/${MODEL_FILE_NAME}"
+  download_with_retry "${MODEL_URL}" "${MODEL_DIR_DST}/${MODEL_FILE_NAME}"
+elif [[ -n "${MODEL_BASE_URL_EFFECTIVE}" ]]; then
+  echo "==> Downloading GGUF from MODEL_BASE_URL"
+  download_with_retry "${MODEL_BASE_URL_EFFECTIVE}/${MODEL_FILE_NAME}" "${MODEL_DIR_DST}/${MODEL_FILE_NAME}"
 else
   echo "error: GGUF file not found and MODEL_URL is not set." >&2
-  echo "       Expected local: ${MODEL_DIR_SRC}/${MODEL_FILE_NAME}" >&2
+  if [[ -n "${MODEL_DIR_SRC}" ]]; then
+    echo "       Expected local: ${MODEL_DIR_SRC}/${MODEL_FILE_NAME}" >&2
+  fi
   exit 1
 fi
 

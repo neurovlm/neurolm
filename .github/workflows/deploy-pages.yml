@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       MODEL_URL: ${{ secrets.MODEL_URL }}
+      MODEL_BASE_URL: ${{ secrets.MODEL_BASE_URL }}
       MODEL_SHA256: ${{ secrets.MODEL_SHA256 }}
       MODEL_FILE_NAME: model-q4_k_m.gguf
       SKIP_WASM_BUILD: "1"

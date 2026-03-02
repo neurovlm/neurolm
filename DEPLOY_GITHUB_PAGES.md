@@ -31,10 +31,17 @@ Then commit the generated files in `site/pkg` (including `lm_wasm_bg.wasm`).
 - GitHub git pushes reject files larger than 100 MB.
 - The workflow expects a downloadable model URL in `MODEL_URL`.
 
-Host the GGUF file somewhere public (for example a GitHub Release asset, HF, or object storage), then set:
+Host model files somewhere public (for example a GitHub Release asset, HF, or object storage), then set:
 
-- `MODEL_URL` (required): direct URL to `model-q4_k_m.gguf`
+- `MODEL_URL` (recommended): direct URL to `model-q4_k_m.gguf`
+- `MODEL_BASE_URL` (optional): base URL that contains:
+  - `config.json`
+  - `generation_config.json`
+  - `tokenizer.json`
+  - `model-q4_k_m.gguf`
 - `MODEL_SHA256` (optional): checksum for verification
+
+If `MODEL_BASE_URL` is omitted, the script derives it from `MODEL_URL`.
 
 ## One-time GitHub setup
 
@@ -44,7 +51,8 @@ Host the GGUF file somewhere public (for example a GitHub Release asset, HF, or 
 3. In GitHub repo settings:
    - `Settings -> Pages -> Build and deployment -> Source`: select `GitHub Actions`.
 4. In `Settings -> Secrets and variables -> Actions`, add:
-   - `MODEL_URL`
+   - `MODEL_URL` (or `MODEL_BASE_URL`)
+   - `MODEL_BASE_URL` (optional but recommended)
    - `MODEL_SHA256` (optional)
 
 ## Local git commands
