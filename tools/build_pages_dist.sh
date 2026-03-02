@@ -118,7 +118,29 @@ echo "==> Staging static site into ${DIST_DIR}"
 rm -rf "${DIST_DIR}"
 mkdir -p "${DIST_DIR}"
 cp -R "${ROOT_DIR}/site" "${DIST_DIR}/site"
-cp "${ROOT_DIR}/index.html" "${DIST_DIR}/index.html"
+
+if [[ -f "${ROOT_DIR}/index.html" ]]; then
+  cp "${ROOT_DIR}/index.html" "${DIST_DIR}/index.html"
+else
+  cat >"${DIST_DIR}/index.html" <<'EOF'
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NeuroLM</title>
+    <meta http-equiv="refresh" content="0; url=./site/" />
+    <script>
+      window.location.replace("./site/");
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to <a href="./site/">NeuroLM</a>...</p>
+  </body>
+</html>
+EOF
+fi
+
 rm -f "${DIST_DIR}/site/pkg/.gitignore"
 
 if [[ -f "${ROOT_DIR}/CNAME" ]]; then
