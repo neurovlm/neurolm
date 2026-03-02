@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+if [[ ! -d "${ROOT_DIR}/site" && -d "${ROOT_DIR}/neurolm/site" ]]; then
+  ROOT_DIR="${ROOT_DIR}/neurolm"
+fi
 DIST_DIR="${1:-${ROOT_DIR}/dist}"
 
-MODEL_DIR_SRC="${ROOT_DIR}/model"
 MODEL_DIR_DST="${DIST_DIR}/model"
 MODEL_FILE_NAME="${MODEL_FILE_NAME:-model-q4_k_m.gguf}"
 MODEL_URL="${MODEL_URL:-}"
 MODEL_SHA256="${MODEL_SHA256:-}"
 SKIP_MODEL="${SKIP_MODEL:-0}"
+SKIP_WASM_BUILD="${SKIP_WASM_BUILD:-0}"
 
 required_model_files=(
   "config.json"
@@ -17,21 +21,55 @@ required_model_files=(
   "tokenizer.json"
 )
 
-if ! command -v wasm-pack >/dev/null 2>&1; then
-  echo "error: wasm-pack is not installed. Install it with: cargo install wasm-pack --locked" >&2
-  exit 1
+required_wasm_pkg_files=(
+  "lm_wasm.js"
+  "lm_wasm_bg.wasm"
+  "package.json"
+)
+
+check_prebuilt_wasm_pkg() {
+  local missing=0
+  for file in "${required_wasm_pkg_files[@]}"; do
+    if [[ ! -f "${ROOT_DIR}/site/pkg/${file}" ]]; then
+      echo "error: missing prebuilt WASM file: ${ROOT_DIR}/site/pkg/${file}" >&2
+      missing=1
+    fi
+  done
+  if [[ "${missing}" -ne 0 ]]; then
+    echo "error: prebuilt WASM assets are required. Build locally first:" >&2
+    echo "       cd ${ROOT_DIR} && ./tools/build_wasm_local.sh" >&2
+    exit 1
+  fi
+}
+
+if [[ "${SKIP_WASM_BUILD}" == "1" ]]; then
+  echo "==> SKIP_WASM_BUILD=1 set, using prebuilt site/pkg artifacts"
+  check_prebuilt_wasm_pkg
+else
+  if [[ ! -d "${ROOT_DIR}/wasm" ]]; then
+    echo "==> wasm/ directory not found at ${ROOT_DIR}/wasm; using prebuilt site/pkg artifacts"
+    check_prebuilt_wasm_pkg
+  else
+    "${ROOT_DIR}/tools/build_wasm_local.sh"
+    check_prebuilt_wasm_pkg
+  fi
 fi
 
-echo "==> Building WASM package"
-pushd "${ROOT_DIR}/wasm" >/dev/null
-RUSTFLAGS='--cfg getrandom_backend="wasm_js"' wasm-pack build --target web --release --out-dir ../site/pkg
-popd >/dev/null
+if [[ -d "${ROOT_DIR}/model" ]]; then
+  MODEL_DIR_SRC="${ROOT_DIR}/model"
+elif [[ -d "${ROOT_DIR}/site/model" ]]; then
+  MODEL_DIR_SRC="${ROOT_DIR}/site/model"
+else
+  echo "error: model directory not found. Expected ${ROOT_DIR}/model or ${ROOT_DIR}/site/model" >&2
+  exit 1
+fi
 
 echo "==> Staging static site into ${DIST_DIR}"
 rm -rf "${DIST_DIR}"
 mkdir -p "${DIST_DIR}"
 cp -R "${ROOT_DIR}/site" "${DIST_DIR}/site"
 cp "${ROOT_DIR}/index.html" "${DIST_DIR}/index.html"
+rm -f "${DIST_DIR}/site/pkg/.gitignore"
 
 if [[ -f "${ROOT_DIR}/CNAME" ]]; then
   cp "${ROOT_DIR}/CNAME" "${DIST_DIR}/CNAME"

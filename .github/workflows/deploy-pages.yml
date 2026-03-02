@@ -22,6 +22,7 @@ jobs:
       MODEL_URL: ${{ secrets.MODEL_URL }}
       MODEL_SHA256: ${{ secrets.MODEL_SHA256 }}
       MODEL_FILE_NAME: model-q4_k_m.gguf
+      SKIP_WASM_BUILD: "1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,15 +30,7 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Install wasm-pack
-        run: cargo install wasm-pack --locked
-
-      - name: Build and stage static pages artifact
+      - name: Stage static pages artifact (prebuilt WASM)
         run: ./tools/build_pages_dist.sh
 
       - name: Upload pages artifact

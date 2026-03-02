@@ -11,6 +11,13 @@ Deployment guide and CI workflow details:
 
 - `DEPLOY_GITHUB_PAGES.md`
 
+GitHub Actions deploys prebuilt `site/pkg` assets. Build WASM locally before push:
+
+```bash
+cd /home/rph/efficient_ai/neurolm
+./tools/build_wasm_local.sh
+```
+
 ## Required static files
 
 Serve these files from your site:

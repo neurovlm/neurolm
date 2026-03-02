@@ -9,9 +9,20 @@ This project is a static runtime (HTML + JS + WASM). GitHub Pages is a good fit.
 
 The workflow:
 
-1. Builds the WASM package with `wasm-pack`.
+1. Uses prebuilt WASM artifacts from `site/pkg`.
 2. Stages static files into `dist/`.
 3. Publishes `dist/` to GitHub Pages.
+
+## Build WASM locally (before pushing)
+
+From repo root:
+
+```bash
+cd /home/rph/efficient_ai/neurolm
+./tools/build_wasm_local.sh
+```
+
+Then commit the generated files in `site/pkg` (including `lm_wasm_bg.wasm`).
 
 ## Important model note
 
@@ -63,6 +74,12 @@ git remote set-url origin git@github.com:neurovlm/neurolm.git
 cd /home/rph/efficient_ai/neurolm
 MODEL_URL="https://your-host/path/model-q4_k_m.gguf" ./tools/build_pages_dist.sh
 python3 -m http.server 8008 --directory dist
+```
+
+To test exactly what CI does (no wasm compile in CI):
+
+```bash
+SKIP_WASM_BUILD=1 MODEL_URL="https://your-host/path/model-q4_k_m.gguf" ./tools/build_pages_dist.sh
 ```
 
 Open:

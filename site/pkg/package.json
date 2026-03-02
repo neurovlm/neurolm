@@ -1,0 +1,15 @@
+{
+  "name": "lm_wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "lm_wasm_bg.wasm",
+    "lm_wasm.js",
+    "lm_wasm.d.ts"
+  ],
+  "main": "lm_wasm.js",
+  "types": "lm_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
