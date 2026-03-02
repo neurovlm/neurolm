@@ -26,22 +26,24 @@ Then commit the generated files in `site/pkg` (including `lm_wasm_bg.wasm`).
 
 ## Important model note
 
-`model-q4_k_m.gguf` is ~379 MB and should not be committed directly to GitHub git history.
+`model-q4_k_m.gguf` is ~379 MB, so normal git push is blocked (>100 MB).
+Use Git LFS for `model/*.gguf` (already configured in `.gitattributes`).
 
-- GitHub git pushes reject files larger than 100 MB.
-- The workflow expects a downloadable model URL in `MODEL_URL`.
+Track/add model with LFS:
 
-Host model files somewhere public (for example a GitHub Release asset, HF, or object storage), then set:
+```bash
+cd /home/rph/efficient_ai/neurolm
+git lfs install
+git add .gitattributes model/model-q4_k_m.gguf
+```
 
-- `MODEL_URL` (recommended): direct URL to `model-q4_k_m.gguf`
-- `MODEL_BASE_URL` (optional): base URL that contains:
-  - `config.json`
-  - `generation_config.json`
-  - `tokenizer.json`
-  - `model-q4_k_m.gguf`
-- `MODEL_SHA256` (optional): checksum for verification
+The workflow checks out with `lfs: true`, so CI receives the real GGUF binary.
 
-If `MODEL_BASE_URL` is omitted, the script derives it from `MODEL_URL`.
+Alternative (optional): host model files externally and set:
+
+- `MODEL_URL`: direct URL to `model-q4_k_m.gguf`
+- `MODEL_BASE_URL`: base URL with `config.json`, `generation_config.json`, `tokenizer.json`
+- `MODEL_SHA256` (optional)
 
 ## One-time GitHub setup
 
@@ -50,10 +52,10 @@ If `MODEL_BASE_URL` is omitted, the script derives it from `MODEL_URL`.
    `git@github.com:neurovlm/neurolm.git`
 3. In GitHub repo settings:
    - `Settings -> Pages -> Build and deployment -> Source`: select `GitHub Actions`.
-4. In `Settings -> Secrets and variables -> Actions`, add:
-   - `MODEL_URL` (or `MODEL_BASE_URL`)
-   - `MODEL_BASE_URL` (optional but recommended)
-   - `MODEL_SHA256` (optional)
+4. Optional only if not using repo/LFS model files: add Actions secrets
+   - `MODEL_URL`
+   - `MODEL_BASE_URL`
+   - `MODEL_SHA256`
 
 ## Local git commands
 

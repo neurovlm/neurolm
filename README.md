@@ -18,6 +18,8 @@ cd /home/rph/efficient_ai/neurolm
 ./tools/build_wasm_local.sh
 ```
 
+Model file (`model-q4_k_m.gguf`) should be committed with Git LFS (`model/*.gguf`).
+
 ## Required static files
 
 Serve these files from your site:

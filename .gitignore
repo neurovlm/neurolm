@@ -1,3 +1,2 @@
 wasm/pkg/
 dist/
-model/*.gguf

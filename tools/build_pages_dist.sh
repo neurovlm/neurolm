@@ -72,6 +72,19 @@ download_with_retry() {
   curl --fail --location --retry 3 --retry-delay 3 "${src}" -o "${dst}"
 }
 
+ensure_not_lfs_pointer() {
+  local file="$1"
+  if [[ ! -f "${file}" ]]; then
+    echo "error: file not found: ${file}" >&2
+    exit 1
+  fi
+  if head -n 1 "${file}" | grep -qx 'version https://git-lfs.github.com/spec/v1'; then
+    echo "error: ${file} is a Git LFS pointer, not the actual model binary." >&2
+    echo "       Run 'git lfs pull' locally, and in Actions ensure checkout uses 'lfs: true'." >&2
+    exit 1
+  fi
+}
+
 if [[ "${SKIP_WASM_BUILD}" == "1" ]]; then
   echo "==> SKIP_WASM_BUILD=1 set, using prebuilt site/pkg artifacts"
   check_prebuilt_wasm_pkg
@@ -145,6 +158,10 @@ else
     echo "       Expected local: ${MODEL_DIR_SRC}/${MODEL_FILE_NAME}" >&2
   fi
   exit 1
+fi
+
+if [[ "${SKIP_MODEL}" != "1" ]]; then
+  ensure_not_lfs_pointer "${MODEL_DIR_DST}/${MODEL_FILE_NAME}"
 fi
 
 if [[ -n "${MODEL_SHA256}" && -f "${MODEL_DIR_DST}/${MODEL_FILE_NAME}" ]]; then
