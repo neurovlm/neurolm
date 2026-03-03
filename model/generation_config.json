@@ -5,8 +5,9 @@
     151643
   ],
   "pad_token_id": 151643,
-  "temperature": 0.6,
+  "temperature": 0.1,
   "top_k": 20,
   "top_p": 0.95,
+  "repetition_penalty": 1.1,
   "transformers_version": "5.2.0"
 }

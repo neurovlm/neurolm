@@ -19,7 +19,7 @@ fi
 
 echo "==> Building WASM package"
 pushd "${ROOT_DIR}/wasm" >/dev/null
-RUSTFLAGS='--cfg getrandom_backend="wasm_js"' wasm-pack build --target web --release --out-dir ../site/pkg
+RUSTFLAGS='--cfg getrandom_backend="wasm_js" -C target-feature=+simd128' wasm-pack build --target web --release --out-dir ../site/pkg
 popd >/dev/null
 
 cat >"${ROOT_DIR}/site/pkg/.gitignore" <<'EOF'

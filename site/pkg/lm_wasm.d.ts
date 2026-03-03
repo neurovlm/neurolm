@@ -5,8 +5,8 @@ export class NeuroSession {
     free(): void;
     [Symbol.dispose](): void;
     configure(config_json: string, generation_json: string, tokenizer_json: string, meta_json: string): void;
-    generate(prompt: string, max_new_tokens: number, temperature: number, top_p: number, top_k: number, enable_thinking: boolean): string;
-    generate_stream(prompt: string, max_new_tokens: number, temperature: number, top_p: number, top_k: number, enable_thinking: boolean, on_token: Function): string;
+    generate(prompt: string, max_new_tokens: number, temperature: number, top_p: number, top_k: number, enable_thinking: boolean, repetition_penalty: number): string;
+    generate_stream(prompt: string, max_new_tokens: number, temperature: number, top_p: number, top_k: number, enable_thinking: boolean, repetition_penalty: number, on_token: Function): string;
     /**
      * Loads a GGUF model blob into Candle quantized Qwen3 runtime.
      */
@@ -20,8 +20,8 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_neurosession_free: (a: number, b: number) => void;
     readonly neurosession_configure: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
-    readonly neurosession_generate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
-    readonly neurosession_generate_stream: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: any) => [number, number, number, number];
+    readonly neurosession_generate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number, number];
+    readonly neurosession_generate_stream: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: any) => [number, number, number, number];
     readonly neurosession_load_model: (a: number, b: number, c: number) => [number, number];
     readonly neurosession_new: () => number;
     readonly __wbindgen_exn_store: (a: number) => void;

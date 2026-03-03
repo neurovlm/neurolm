@@ -7,6 +7,7 @@ if [[ ! -d "${ROOT_DIR}/site" && -d "${ROOT_DIR}/neurolm/site" ]]; then
   ROOT_DIR="${ROOT_DIR}/neurolm"
 fi
 DIST_DIR="${1:-${ROOT_DIR}/dist}"
+APP_ROUTE_DIR="${APP_ROUTE_DIR:-chat}"
 
 MODEL_DIR_DST="${DIST_DIR}/model"
 MODEL_FILE_NAME="${MODEL_FILE_NAME:-model-q4_k_m.gguf}"
@@ -122,6 +123,11 @@ else
 fi
 check_site_files
 
+if [[ ! "${APP_ROUTE_DIR}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "error: APP_ROUTE_DIR must be a simple path segment (got '${APP_ROUTE_DIR}')" >&2
+  exit 1
+fi
+
 MODEL_BASE_URL_EFFECTIVE="$(derive_model_base_url)"
 MODEL_DIR_SRC=""
 if [[ -d "${ROOT_DIR}/model" ]]; then
@@ -141,10 +147,10 @@ fi
 echo "==> Staging static site into ${DIST_DIR}"
 rm -rf "${DIST_DIR}"
 mkdir -p "${DIST_DIR}"
-cp -R "${ROOT_DIR}/site" "${DIST_DIR}/site"
+cp -R "${ROOT_DIR}/site" "${DIST_DIR}/${APP_ROUTE_DIR}"
 
 if [[ -f "${ROOT_DIR}/index.html" ]]; then
-  cp "${ROOT_DIR}/index.html" "${DIST_DIR}/index.html"
+  sed 's#\./site/#./'"${APP_ROUTE_DIR}"'/#g' "${ROOT_DIR}/index.html" > "${DIST_DIR}/index.html"
 else
   cat >"${DIST_DIR}/index.html" <<'EOF'
 <!doctype html>
@@ -153,19 +159,19 @@ else
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NeuroLM</title>
-    <meta http-equiv="refresh" content="0; url=./site/" />
+    <meta http-equiv="refresh" content="0; url=./chat/" />
     <script>
-      window.location.replace("./site/");
+      window.location.replace("./chat/");
     </script>
   </head>
   <body>
-    <p>Redirecting to <a href="./site/">NeuroLM</a>...</p>
+    <p>Redirecting to <a href="./chat/">NeuroLM</a>...</p>
   </body>
 </html>
 EOF
 fi
 
-rm -f "${DIST_DIR}/site/pkg/.gitignore"
+rm -f "${DIST_DIR}/${APP_ROUTE_DIR}/pkg/.gitignore"
 
 if [[ -f "${ROOT_DIR}/CNAME" ]]; then
   cp "${ROOT_DIR}/CNAME" "${DIST_DIR}/CNAME"

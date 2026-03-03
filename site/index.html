@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NeuroLM Local</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260302-11" />
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
     <script>
@@ -23,6 +23,23 @@
   <body>
     <div class="bg-gradient"></div>
     <div class="bg-grid"></div>
+    <div class="startup-overlay" id="startup-overlay" role="status" aria-live="polite">
+      <div class="startup-card glass">
+        <div class="startup-spinner" aria-hidden="true"></div>
+        <p class="startup-eyebrow" id="startup-title">Preparing NeuroLM (WASM CPU)</p>
+        <h2 class="startup-headline">Downloading local model</h2>
+        <p class="startup-stage" id="startup-stage">
+          Fetching model weights. First load can take a while depending on network speed.
+        </p>
+        <div class="startup-progress-track" id="startup-progress-track">
+          <div class="startup-progress-fill" id="startup-progress-fill"></div>
+        </div>
+        <p class="startup-sub" id="startup-sub">
+          The model is cached after first successful download.
+        </p>
+        <button class="startup-retry hidden" id="startup-retry" type="button">Reload</button>
+      </div>
+    </div>
 
     <header class="topbar glass">
         <div class="brand-wrap">
@@ -84,6 +101,7 @@
             <li id="d-arch">-</li>
             <li id="d-quant">-</li>
             <li id="d-path">-</li>
+            <li id="d-data">-</li>
           </ul>
         </section>
       </aside>
@@ -105,30 +123,60 @@
           ></textarea>
 
           <div class="composer-controls">
-            <div class="knobs">
-              <div class="slider-control">
-                <label for="temperature">Temp</label>
-                <input id="temperature" type="range" min="0" max="1.2" value="0.0" step="0.05" />
-                <div class="slider-value" id="temperature-value">0.00</div>
-              </div>
-              <div class="slider-control">
-                <label for="top-p">Top P</label>
-                <input id="top-p" type="range" min="0.1" max="1.0" value="0.95" step="0.01" />
-                <div class="slider-value" id="top-p-value">0.95</div>
-              </div>
-              <div class="slider-control">
-                <label for="max-new">Max Tokens</label>
-                <input id="max-new" type="range" min="64" max="8192" value="8192" step="64" />
-                <div class="slider-value" id="max-new-value">8192</div>
-              </div>
-              <label class="toggle-control history-toggle">
-                <input id="history-mode" type="checkbox" checked />
-                <span>Chat History</span>
-              </label>
-              <label class="think-toggle">
-                <input id="think-mode" type="checkbox" checked />
-                <span>Think Mode</span>
-              </label>
+            <div class="control-grid">
+              <section class="control-group">
+                <p class="control-group-title">Sampling</p>
+                <div class="slider-grid">
+                  <div class="slider-control">
+                    <div class="slider-head">
+                      <label for="temperature">Temp</label>
+                      <div class="slider-value" id="temperature-value">0.10</div>
+                    </div>
+                    <input id="temperature" type="range" min="0" max="1.2" value="0.10" step="0.05" />
+                  </div>
+                  <div class="slider-control">
+                    <div class="slider-head">
+                      <label for="top-p">Top P</label>
+                      <div class="slider-value" id="top-p-value">0.95</div>
+                    </div>
+                    <input id="top-p" type="range" min="0.1" max="1.0" value="0.95" step="0.01" />
+                  </div>
+                  <div class="slider-control">
+                    <div class="slider-head">
+                      <label for="repetition-penalty">Repeat Penalty</label>
+                      <div class="slider-value" id="repetition-penalty-value">1.10</div>
+                    </div>
+                    <input
+                      id="repetition-penalty"
+                      type="range"
+                      min="1.0"
+                      max="1.5"
+                      value="1.10"
+                      step="0.01"
+                    />
+                  </div>
+                  <div class="slider-control">
+                    <div class="slider-head">
+                      <label for="max-new">Max Tokens</label>
+                      <div class="slider-value" id="max-new-value">8192</div>
+                    </div>
+                    <input id="max-new" type="range" min="64" max="8192" value="8192" step="64" />
+                  </div>
+                </div>
+              </section>
+              <section class="control-group">
+                <p class="control-group-title">Modes</p>
+                <div class="toggle-grid">
+                  <label class="toggle-control history-toggle">
+                    <input id="history-mode" type="checkbox" checked />
+                    <span>Chat History</span>
+                  </label>
+                  <label class="toggle-control think-toggle">
+                    <input id="think-mode" type="checkbox" checked />
+                    <span>Think Mode (slower)</span>
+                  </label>
+                </div>
+              </section>
             </div>
             <button id="send-btn" type="submit">Run Local Inference</button>
           </div>
@@ -143,6 +191,6 @@
       </article>
     </template>
 
-    <script type="module" src="./app.js?v=20260228-13"></script>
+    <script type="module" src="./app.js?v=20260302-10"></script>
   </body>
 </html>

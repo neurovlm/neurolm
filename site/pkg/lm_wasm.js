@@ -38,15 +38,16 @@ export class NeuroSession {
      * @param {number} top_p
      * @param {number} top_k
      * @param {boolean} enable_thinking
+     * @param {number} repetition_penalty
      * @returns {string}
      */
-    generate(prompt, max_new_tokens, temperature, top_p, top_k, enable_thinking) {
+    generate(prompt, max_new_tokens, temperature, top_p, top_k, enable_thinking, repetition_penalty) {
         let deferred3_0;
         let deferred3_1;
         try {
             const ptr0 = passStringToWasm0(prompt, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
             const len0 = WASM_VECTOR_LEN;
-            const ret = wasm.neurosession_generate(this.__wbg_ptr, ptr0, len0, max_new_tokens, temperature, top_p, top_k, enable_thinking);
+            const ret = wasm.neurosession_generate(this.__wbg_ptr, ptr0, len0, max_new_tokens, temperature, top_p, top_k, enable_thinking, repetition_penalty);
             var ptr2 = ret[0];
             var len2 = ret[1];
             if (ret[3]) {
@@ -67,16 +68,17 @@ export class NeuroSession {
      * @param {number} top_p
      * @param {number} top_k
      * @param {boolean} enable_thinking
+     * @param {number} repetition_penalty
      * @param {Function} on_token
      * @returns {string}
      */
-    generate_stream(prompt, max_new_tokens, temperature, top_p, top_k, enable_thinking, on_token) {
+    generate_stream(prompt, max_new_tokens, temperature, top_p, top_k, enable_thinking, repetition_penalty, on_token) {
         let deferred3_0;
         let deferred3_1;
         try {
             const ptr0 = passStringToWasm0(prompt, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
             const len0 = WASM_VECTOR_LEN;
-            const ret = wasm.neurosession_generate_stream(this.__wbg_ptr, ptr0, len0, max_new_tokens, temperature, top_p, top_k, enable_thinking, on_token);
+            const ret = wasm.neurosession_generate_stream(this.__wbg_ptr, ptr0, len0, max_new_tokens, temperature, top_p, top_k, enable_thinking, repetition_penalty, on_token);
             var ptr2 = ret[0];
             var len2 = ret[1];
             if (ret[3]) {

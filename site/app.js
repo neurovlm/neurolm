@@ -1,4 +1,4 @@
-import { LocalNeuroEngine } from "./engine.js?v=20260228-11";
+import { LocalNeuroEngine } from "./engine.js?v=20260302-09";
 
 const els = {
   runtimePill: document.getElementById("runtime-pill"),
@@ -9,14 +9,23 @@ const els = {
   sendBtn: document.getElementById("send-btn"),
   temperature: document.getElementById("temperature"),
   topP: document.getElementById("top-p"),
+  repetitionPenalty: document.getElementById("repetition-penalty"),
   maxNew: document.getElementById("max-new"),
   temperatureValue: document.getElementById("temperature-value"),
   topPValue: document.getElementById("top-p-value"),
+  repetitionPenaltyValue: document.getElementById("repetition-penalty-value"),
   maxNewValue: document.getElementById("max-new-value"),
   historyMode: document.getElementById("history-mode"),
   thinkMode: document.getElementById("think-mode"),
   signalCanvas: document.getElementById("signal-canvas"),
   signalState: document.getElementById("signal-state"),
+  startupOverlay: document.getElementById("startup-overlay"),
+  startupTitle: document.getElementById("startup-title"),
+  startupStage: document.getElementById("startup-stage"),
+  startupSub: document.getElementById("startup-sub"),
+  startupProgressTrack: document.getElementById("startup-progress-track"),
+  startupProgressFill: document.getElementById("startup-progress-fill"),
+  startupRetry: document.getElementById("startup-retry"),
   metrics: {
     tps: document.getElementById("m-tps"),
     ftl: document.getElementById("m-ftl"),
@@ -30,6 +39,7 @@ const els = {
     arch: document.getElementById("d-arch"),
     quant: document.getElementById("d-quant"),
     path: document.getElementById("d-path"),
+    data: document.getElementById("d-data"),
   },
 };
 
@@ -40,8 +50,9 @@ let activeAbortController = null;
 // AR(3) coefficients for computational-load process: x_t = a1*x_{t-1} + a2*x_{t-2} + a3*x_{t-3} + eps_t
 const LOAD_AR3_COEFFS = [2.2, -1.6, 0.36];
 // Constant speed / sampling rate (samples per second).
-const LOAD_SAMPLE_HZ = 250;
+const LOAD_SAMPLE_HZ = 60;
 const LOAD_SAMPLE_INTERVAL_MS = 1000 / LOAD_SAMPLE_HZ;
+const SIGNAL_DRAW_INTERVAL_MS = 33;
 // Idle variance/amplitude (as Gaussian noise std dev).
 const LOAD_IDLE_STD = 0.0005;
 // Generation variance/amplitude (as Gaussian noise std dev).
@@ -58,6 +69,7 @@ let loadAr2 = 0;
 let loadAr3 = 0;
 let loadAccumulatorMs = 0;
 let loadLastTs = 0;
+let loadLastDrawTs = 0;
 let loadTrace = [];
 const MAX_MESSAGES = 80;
 const MAX_HISTORY_MESSAGES = 24;
@@ -66,6 +78,8 @@ const HISTORY_SUMMARY_MAX_ITEMS = 10;
 const HISTORY_SUMMARY_CHAR_CAP = 1400;
 const THINK_TOKEN_CAP = 1028;
 const THINK_TIME_LIMIT_MS = 60000;
+const STREAM_RENDER_INTERVAL_MS = 120;
+const THINK_ANSWER_SCAN_INTERVAL_MS = 180;
 const conversationHistory = [];
 const textMeasureCanvas = document.createElement("canvas");
 const textMeasureCtx = textMeasureCanvas.getContext("2d");
@@ -133,27 +147,62 @@ function queueMathTypeset(container) {
   }, 120);
 }
 
-function setAssistantBody(frame, text) {
+function setAssistantBody(frame, text, options = {}) {
   const content = String(text || "").trim();
   if (!content) {
     frame.body.textContent = "";
     return;
   }
   frame.body.innerHTML = renderMarkdown(content);
-  queueMathTypeset(frame.body);
+  if (options.typesetMath !== false) {
+    queueMathTypeset(frame.body);
+  }
 }
 
 function setStatus(text) {
   els.runtimePill.textContent = text;
 }
 
+function setStartupVisible(visible) {
+  if (!els.startupOverlay) return;
+  els.startupOverlay.classList.toggle("hidden", !visible);
+}
+
+function setStartupProgress(progress) {
+  if (!els.startupProgressFill || !els.startupProgressTrack) return;
+  if (!Number.isFinite(progress)) {
+    els.startupProgressTrack.classList.remove("hidden");
+    els.startupProgressFill.style.width = "15%";
+    return;
+  }
+  const bounded = Math.max(0, Math.min(100, progress));
+  els.startupProgressTrack.classList.remove("hidden");
+  els.startupProgressFill.style.width = `${bounded}%`;
+}
+
+function updateStartupView({ title, stage, sub, progress, failed = false }) {
+  if (els.startupTitle && title) els.startupTitle.textContent = String(title);
+  if (els.startupStage && stage) els.startupStage.textContent = String(stage);
+  if (els.startupSub && sub) els.startupSub.textContent = String(sub);
+  setStartupProgress(progress);
+  if (els.startupRetry) {
+    els.startupRetry.classList.toggle("hidden", !failed);
+  }
+}
+
+function formatMb(bytes) {
+  const mb = Number(bytes) / (1024 * 1024);
+  if (!Number.isFinite(mb) || mb <= 0) return "?";
+  return mb.toFixed(mb < 100 ? 1 : 0);
+}
+
 function runtimeLabel(mode, phase = "active") {
   const m = String(mode || "");
   if (m.includes("error")) {
-    return "Candle WASM error";
+    return "Candle WASM CPU error";
   }
   if (m.startsWith("candle-wasm")) {
-    return phase === "ready" ? "Candle WASM ready" : "Candle WASM active";
+    return phase === "ready" ? "Candle WASM CPU ready" : "Candle WASM CPU active";
   }
   if (m.startsWith("unavailable") || m === "initializing") {
     return phase === "ready" ? "WASM runtime unavailable" : "Initializing WASM runtime";
@@ -433,7 +482,37 @@ function truncateToSingleLineByWidth(text, el, metricsCache) {
   };
 }
 
-function renderAssistant(frame, rawText, thinkMode) {
+function renderAssistant(frame, rawText, thinkMode, options = {}) {
+  const streaming = options.streaming === true;
+  if (!thinkMode) {
+    const plain = String(rawText || "");
+    if (streaming) {
+      setAssistantBody(frame, plain, { typesetMath: false });
+    } else {
+      setAssistantBody(frame, plain);
+    }
+    frame.thinkingLive.classList.add("hidden");
+    frame.thinkingLive.classList.remove("expandable");
+    frame.thinkingLive.classList.remove("live-expanded");
+    frame.thinkingPreview.textContent = "";
+    frame.thinkingPreview.classList.remove("hidden");
+    frame.thinkingPreviewFull.classList.add("hidden");
+    frame.thinkingPreviewFull.textContent = "";
+    frame.thinkingPreviewHint.classList.add("hidden");
+    frame.liveCanExpand = false;
+    frame.liveExpanded = false;
+    frame.liveThoughtText = "";
+    frame.thought.classList.add("hidden");
+    frame.expanded = false;
+    frame.thoughtToggle.textContent = "Show trace";
+    frame.thoughtTitle.textContent = "Thinking Trace (Internal)";
+    frame.thoughtRecent.classList.add("hidden");
+    frame.thoughtRecent.textContent = "";
+    frame.thoughtFull.classList.add("hidden");
+    frame.thoughtFull.textContent = "";
+    return;
+  }
+
   const parsed = extractThought(rawText, thinkMode);
   const hasAnswer = Boolean(parsed.answer && parsed.answer.trim().length > 0);
   const thoughtText = normalizeThoughtText(parsed.thought);
@@ -491,9 +570,18 @@ function renderAssistant(frame, rawText, thinkMode) {
   }
 
   if (hasAnswer) {
-    setAssistantBody(frame, parsed.answer);
+    if (streaming) {
+      setAssistantBody(frame, parsed.answer, { typesetMath: false });
+    } else {
+      setAssistantBody(frame, parsed.answer);
+    }
   } else if (!thinkMode) {
-    setAssistantBody(frame, parsed.answer || String(rawText || ""));
+    const fallback = parsed.answer || String(rawText || "");
+    if (streaming) {
+      setAssistantBody(frame, fallback, { typesetMath: false });
+    } else {
+      setAssistantBody(frame, fallback);
+    }
   } else {
     frame.body.textContent = "";
   }
@@ -521,12 +609,53 @@ function renderAssistant(frame, rawText, thinkMode) {
   }
 }
 
+function createStreamRenderScheduler(frame, thinkMode) {
+  let latestText = "";
+  let pending = false;
+  let lastRenderTs = 0;
+
+  const flush = (force = false) => {
+    pending = false;
+    const now = performance.now();
+    if (!force && now - lastRenderTs < STREAM_RENDER_INTERVAL_MS) {
+      schedule(false);
+      return;
+    }
+    lastRenderTs = now;
+    renderAssistant(frame, latestText, thinkMode, { streaming: true });
+    scrollMessages();
+  };
+
+  const schedule = (force = false) => {
+    if (force) {
+      flush(true);
+      return;
+    }
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => flush(false));
+  };
+
+  return {
+    push(text) {
+      latestText = String(text || "");
+      schedule(false);
+    },
+    flush() {
+      flush(true);
+    },
+  };
+}
+
 function updateSliderReadouts() {
   if (els.temperatureValue) {
     els.temperatureValue.textContent = Number(els.temperature.value).toFixed(2);
   }
   if (els.topPValue) {
     els.topPValue.textContent = Number(els.topP.value).toFixed(2);
+  }
+  if (els.repetitionPenaltyValue && els.repetitionPenalty) {
+    els.repetitionPenaltyValue.textContent = Number(els.repetitionPenalty.value).toFixed(2);
   }
   if (els.maxNewValue) {
     els.maxNewValue.textContent = String(Math.round(Number(els.maxNew.value)));
@@ -642,9 +771,15 @@ function updateMetrics(metrics) {
 
 function updateDetails(meta, config) {
   els.details.name.textContent = `Model: ${meta?.model?.name ?? "-"}`;
-  els.details.arch.textContent = `Arch: ${config?.model_type ?? "qwen3"} · ${config?.num_hidden_layers ?? "?"} layers · ${config?.hidden_size ?? "?"} hidden`;
+  els.details.arch.textContent = `Arch: ${config?.model_type ?? "qwen3"} · ${config?.num_hidden_layers ?? "?"} layers · ${config?.hidden_size ?? "?"} hidden · CPU WASM`;
   els.details.quant.textContent = `Quant: ${meta?.runtime?.quant_method ?? "gptq"} / ${meta?.runtime?.weight_precision ?? "int4"} + ${meta?.runtime?.act_precision ?? "fp16"}`;
   els.details.path.textContent = `Path: ${meta?.model?.path ?? "-"}`;
+  if (els.details.data) {
+    const trainingData =
+      meta?.model?.training_data ||
+      "Trained on 1.2 million PubMed publications related to cognitive neuroscience";
+    els.details.data.textContent = `Data: ${trainingData}`;
+  }
 
   const method = meta?.runtime?.quant_method?.toUpperCase?.() || "GPTQ";
   const bits = meta?.runtime?.bits ?? 4;
@@ -652,9 +787,14 @@ function updateDetails(meta, config) {
   els.precisionTag.textContent = `${method} W${bits}A${actPrecision.replace("FP", "")}`;
 }
 
-function drawSignal() {
+function drawSignal(ts = performance.now()) {
   const canvas = els.signalCanvas;
   if (!canvas) return;
+  if (ts - loadLastDrawTs < SIGNAL_DRAW_INTERVAL_MS) {
+    requestAnimationFrame(drawSignal);
+    return;
+  }
+  loadLastDrawTs = ts;
 
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -732,6 +872,7 @@ async function onSubmit(event) {
 
   const thinkMode = Boolean(els.thinkMode?.checked);
   const useHistory = Boolean(els.historyMode?.checked);
+  const repetitionPenalty = Number(els.repetitionPenalty?.value ?? 1.0);
   const maxNewTokens = Math.round(Number(els.maxNew.value));
   const streamMaxTokens = thinkMode ? Math.min(maxNewTokens, THINK_TOKEN_CAP) : maxNewTokens;
   if (!useHistory) {
@@ -756,7 +897,9 @@ async function onSubmit(event) {
   let finalRawText = "";
   let thinkTimedOut = false;
   let thinkTimeoutId = null;
+  let lastThinkAnswerScanTs = 0;
   let answerStreamingStarted = false;
+  const streamRenderer = createStreamRenderScheduler(assistantFrame, thinkMode);
 
   try {
     if (thinkMode) {
@@ -780,6 +923,7 @@ async function onSubmit(event) {
         temperature: Number(els.temperature.value),
         maxNewTokens: streamMaxTokens,
         topP: Number(els.topP.value),
+        repetitionPenalty,
         topK: 20,
         thinkMode,
         history: priorHistory,
@@ -790,19 +934,30 @@ async function onSubmit(event) {
         if (!streamed) {
           streamed = true;
         }
-        streamedRaw = fullText || "";
+        if (fullText) {
+          streamedRaw = String(fullText);
+        } else {
+          streamedRaw += String(delta);
+        }
         if (thinkMode && !answerStreamingStarted) {
-          const partial = extractThought(streamedRaw, true);
-          if (partial.answer && partial.answer.trim().length > 0) {
-            answerStreamingStarted = true;
-            if (thinkTimeoutId) {
-              clearTimeout(thinkTimeoutId);
-              thinkTimeoutId = null;
+          const now = performance.now();
+          const shouldScan =
+            now - lastThinkAnswerScanTs >= THINK_ANSWER_SCAN_INTERVAL_MS ||
+            String(delta).includes("</think>") ||
+            String(delta).includes("</thinking>");
+          if (shouldScan) {
+            lastThinkAnswerScanTs = now;
+            const partial = extractThought(streamedRaw, true);
+            if (partial.answer && partial.answer.trim().length > 0) {
+              answerStreamingStarted = true;
+              if (thinkTimeoutId) {
+                clearTimeout(thinkTimeoutId);
+                thinkTimeoutId = null;
+              }
             }
           }
         }
-        renderAssistant(assistantFrame, streamedRaw, thinkMode);
-        scrollMessages();
+        streamRenderer.push(streamedRaw);
       },
     );
     if (thinkTimeoutId) {
@@ -813,6 +968,8 @@ async function onSubmit(event) {
     finalRawText = result.text || streamedRaw || "";
     const generatedTokens = Math.round(Number(finalResult?.metrics?.generated_tokens ?? 0));
     const thinkLimitReached = thinkMode && generatedTokens >= streamMaxTokens;
+
+    streamRenderer.flush();
 
     if (!streamed && finalRawText) {
       renderAssistant(assistantFrame, finalRawText, thinkMode);
@@ -836,6 +993,7 @@ async function onSubmit(event) {
             temperature: Number(els.temperature.value),
             maxNewTokens,
             topP: Number(els.topP.value),
+            repetitionPenalty,
             topK: 20,
             thinkMode: false,
             history: priorHistory,
@@ -881,6 +1039,7 @@ async function onSubmit(event) {
       thinkTimeoutId = null;
     }
     console.error(err);
+    streamRenderer.flush();
     if (err?.name === "AbortError" && thinkMode && thinkTimedOut) {
       setStatus("Thinking timed out, requesting final answer segment");
       try {
@@ -888,6 +1047,7 @@ async function onSubmit(event) {
           temperature: Number(els.temperature.value),
           maxNewTokens,
           topP: Number(els.topP.value),
+          repetitionPenalty,
           topK: 20,
           thinkMode: false,
           history: priorHistory,
@@ -945,8 +1105,79 @@ async function onSubmit(event) {
 async function boot() {
   drawSignal();
   updateSliderReadouts();
-  setStatus("Loading local model metadata");
+  setStatus("Downloading model and initializing WASM CPU");
   els.sendBtn.disabled = true;
+  setStartupVisible(true);
+  updateStartupView({
+    title: "Preparing NeuroLM (WASM CPU)",
+    stage: "Downloading model weights and loading runtime...",
+    sub: "First load may take 1-3 minutes. Later loads should come from cache.",
+    progress: null,
+  });
+
+  if (navigator.storage?.persist) {
+    navigator.storage.persist().catch(() => {});
+  }
+
+  if (els.startupRetry) {
+    els.startupRetry.addEventListener("click", () => window.location.reload());
+  }
+
+  if (typeof engine.setInitProgressHandler === "function") {
+    engine.setInitProgressHandler((payload) => {
+      const stage = String(payload?.stage || "");
+      const modelFile = String(payload?.modelFile || "");
+      const source = payload?.source === "cache" ? "cache" : "network";
+      const loadedBytes = Number(payload?.loadedBytes || 0);
+      const totalBytes = Number(payload?.totalBytes || 0);
+      const explicitPct = Number(payload?.progress || NaN);
+      const computedPct =
+        Number.isFinite(explicitPct)
+          ? explicitPct
+          : totalBytes > 0
+            ? (loadedBytes / totalBytes) * 100
+            : NaN;
+
+      if (stage === "downloading") {
+        const progressText =
+          totalBytes > 0
+            ? `${formatMb(loadedBytes * 1)} / ${formatMb(totalBytes)} MB`
+            : `${formatMb(loadedBytes)} MB downloaded`;
+        updateStartupView({
+          stage: `Downloading ${modelFile || "model"} (${progressText})`,
+          sub: "Please keep this tab open while the model downloads.",
+          progress: computedPct,
+        });
+        return;
+      }
+
+      if (stage === "cache-hit") {
+        updateStartupView({
+          stage: `Loading ${modelFile || "model"} from local browser cache`,
+          sub: "Model cache hit detected. Startup should be faster.",
+          progress: 100,
+        });
+        return;
+      }
+
+      if (stage === "model-loaded") {
+        updateStartupView({
+          stage: `Model loaded (${modelFile || "GGUF"}) from ${source}`,
+          sub: "Initializing inference runtime...",
+          progress: 100,
+        });
+        return;
+      }
+
+      if (stage === "init") {
+        updateStartupView({
+          stage: "Preparing WASM runtime",
+          sub: "WASM CPU runtime is starting...",
+          progress: null,
+        });
+      }
+    });
+  }
 
   try {
     const init = await engine.init();
@@ -969,19 +1200,27 @@ async function boot() {
     if (!busy) {
       els.sendBtn.disabled = false;
     }
+    setStartupVisible(false);
   } catch (err) {
     console.error(err);
     runtimeReady = false;
     setStatus("Initialization failed");
     const msg = String(err?.message || err || "Unknown startup error");
+    updateStartupView({
+      stage: "Initialization failed",
+      sub: msg,
+      progress: null,
+      failed: true,
+    });
+    setStartupVisible(true);
     addMessage(
       "assistant",
-      `Startup error: ${msg}\n\nExpected model files in /site/model or /model with config.json, generation_config.json, tokenizer.json and a GGUF file (model-q4_k_m.gguf, model-q4_0.gguf, or model.gguf).`,
+      `Startup error: ${msg}\n\nExpected model files in /chat/model or /model with config.json, generation_config.json, tokenizer.json and a GGUF file (model-q4_k_m.gguf, model-q4_0.gguf, or model.gguf).`,
     );
   }
 
   els.form.addEventListener("submit", onSubmit);
-  [els.temperature, els.topP, els.maxNew].forEach((input) => {
+  [els.temperature, els.topP, els.repetitionPenalty, els.maxNew].forEach((input) => {
     if (!input) return;
     input.addEventListener("input", updateSliderReadouts);
   });
@@ -993,11 +1232,18 @@ async function boot() {
     });
   }
   els.prompt.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      if (!busy) {
-        els.form.requestSubmit();
-      }
+    const isEnter = event.key === "Enter" || event.code === "NumpadEnter";
+    const plainEnter =
+      isEnter &&
+      !event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.isComposing;
+    if (!plainEnter) return;
+    event.preventDefault();
+    if (!busy) {
+      els.form.requestSubmit();
     }
   });
 

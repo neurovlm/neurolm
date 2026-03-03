@@ -1,6 +1,6 @@
 export class LocalNeuroEngine {
   constructor(options = {}) {
-    const buildTag = "20260228-11";
+    const buildTag = "20260302-09";
     this.modelBaseUrl = options.modelBaseUrl || "./model";
     this.metaUrl = options.metaUrl || null;
     this.workerUrl =
@@ -22,6 +22,7 @@ export class LocalNeuroEngine {
     this.pending = new Map();
     this.streamPending = new Map();
     this.modelInitPromise = null;
+    this.initProgressHandler = null;
 
     // History compression controls.
     this.historyStrategy = String(options.historyStrategy ?? "questions_only");
@@ -31,6 +32,10 @@ export class LocalNeuroEngine {
     this.historyOlderCharCap = Math.max(40, Number(options.historyOlderCharCap ?? 140));
     this.historySummaryTokenBudget = Math.max(16, Number(options.historySummaryTokenBudget ?? 80));
     this.historyUseSummary = options.historyUseSummary === true;
+  }
+
+  setInitProgressHandler(handler) {
+    this.initProgressHandler = typeof handler === "function" ? handler : null;
   }
 
   async init() {
@@ -59,9 +64,12 @@ export class LocalNeuroEngine {
   }
 
   async generate(prompt, options = {}) {
-    const maxNewTokens = Number(options.maxNewTokens ?? 128);
-    const temperature = Number(options.temperature ?? 0.0);
-    const topP = Number(options.topP ?? 1.0);
+    const maxNewTokens = Number(options.maxNewTokens ?? 8192);
+    const temperature = Number(options.temperature ?? 0.10);
+    const topP = Number(options.topP ?? 0.95);
+    const repetitionPenalty = Number(
+      options.repetitionPenalty ?? this.generationConfig?.repetition_penalty ?? 1.10,
+    );
     const topK = Number(options.topK ?? this.generationConfig?.top_k ?? 20);
     const thinkMode = options.thinkMode === true;
     const history = this.#sanitizeHistory(options.history);
@@ -73,22 +81,26 @@ export class LocalNeuroEngine {
 
     const promptWithHistory = this.#composePromptWithHistory(prompt, history);
     const promptWithDirective = this.#applyThinkingDirective(promptWithHistory, thinkMode);
-    const tuned = this.#maybeTuneSampling(temperature, topP, topK, thinkMode);
+    const tuned = this.#maybeTuneSampling(temperature, topP, topK, repetitionPenalty, thinkMode);
     return this.#generateViaWasm(
       promptWithDirective,
       maxNewTokens,
       tuned.temperature,
       tuned.topP,
       tuned.topK,
+      tuned.repetitionPenalty,
       thinkMode,
       signal,
     );
   }
 
   async generateStream(prompt, options = {}, onToken = null) {
-    const maxNewTokens = Number(options.maxNewTokens ?? 128);
-    const temperature = Number(options.temperature ?? 0.0);
-    const topP = Number(options.topP ?? 1.0);
+    const maxNewTokens = Number(options.maxNewTokens ?? 8192);
+    const temperature = Number(options.temperature ?? 0.10);
+    const topP = Number(options.topP ?? 0.95);
+    const repetitionPenalty = Number(
+      options.repetitionPenalty ?? this.generationConfig?.repetition_penalty ?? 1.10,
+    );
     const topK = Number(options.topK ?? this.generationConfig?.top_k ?? 20);
     const thinkMode = options.thinkMode === true;
     const history = this.#sanitizeHistory(options.history);
@@ -100,13 +112,14 @@ export class LocalNeuroEngine {
 
     const promptWithHistory = this.#composePromptWithHistory(prompt, history);
     const promptWithDirective = this.#applyThinkingDirective(promptWithHistory, thinkMode);
-    const tuned = this.#maybeTuneSampling(temperature, topP, topK, thinkMode);
+    const tuned = this.#maybeTuneSampling(temperature, topP, topK, repetitionPenalty, thinkMode);
     const wasmPayload = await this.#generateViaWasmStream(
       promptWithDirective,
       maxNewTokens,
       tuned.temperature,
       tuned.topP,
       tuned.topK,
+      tuned.repetitionPenalty,
       thinkMode,
       signal,
       onToken,
@@ -139,7 +152,7 @@ export class LocalNeuroEngine {
         try {
           const head = await fetch(`${this.modelBaseUrl}/${name}`, {
             method: "HEAD",
-            cache: "no-store",
+            cache: "default",
           });
           if (head.ok) {
             const raw = head.headers.get("content-length");
@@ -304,7 +317,16 @@ export class LocalNeuroEngine {
     this.pending.clear();
   }
 
-  async #generateViaWasm(prompt, maxNewTokens, temperature, topP, topK, enableThinking, signal) {
+  async #generateViaWasm(
+    prompt,
+    maxNewTokens,
+    temperature,
+    topP,
+    topK,
+    repetitionPenalty,
+    enableThinking,
+    signal,
+  ) {
     if (signal?.aborted) {
       throw new DOMException("Generation aborted", "AbortError");
     }
@@ -315,6 +337,7 @@ export class LocalNeuroEngine {
       temperature,
       topP,
       topK,
+      repetitionPenalty,
       enableThinking: enableThinking === true,
     });
     parsed.mode = parsed.mode || "candle-wasm";
@@ -328,6 +351,7 @@ export class LocalNeuroEngine {
     temperature,
     topP,
     topK,
+    repetitionPenalty,
     enableThinking,
     signal,
     onToken,
@@ -390,6 +414,7 @@ export class LocalNeuroEngine {
           temperature,
           topP,
           topK,
+          repetitionPenalty,
           enableThinking: enableThinking === true,
         },
       });
@@ -397,7 +422,7 @@ export class LocalNeuroEngine {
   }
 
   async #fetchJson(url) {
-    const resp = await fetch(url, { cache: "no-store" });
+    const resp = await fetch(url, { cache: "default" });
     if (!resp.ok) {
       throw new Error(`Request failed (${resp.status}) for ${url}`);
     }
@@ -410,6 +435,16 @@ export class LocalNeuroEngine {
 
     this.worker.onmessage = (event) => {
       const data = event.data || {};
+      if (data.event === "init-progress") {
+        if (typeof this.initProgressHandler === "function") {
+          try {
+            this.initProgressHandler(data.payload || {});
+          } catch {
+            // no-op
+          }
+        }
+        return;
+      }
       const { id, ok, result, error, stream, event: streamEvent, delta, text } = data;
 
       if (stream === true) {
@@ -418,7 +453,7 @@ export class LocalNeuroEngine {
 
         if (streamEvent === "token") {
           if (typeof pendingStream.onToken === "function") {
-            pendingStream.onToken(delta || "", text || "");
+            pendingStream.onToken(String(delta || ""), typeof text === "string" ? text : "");
           }
           return;
         }
@@ -629,17 +664,16 @@ export class LocalNeuroEngine {
     return `${directive}\n${cleanPrompt}`;
   }
 
-  #maybeTuneSampling(temperature, topP, topK, thinkMode) {
+  #maybeTuneSampling(temperature, topP, topK, repetitionPenalty, thinkMode) {
     let t = Number.isFinite(temperature) ? temperature : 0.0;
     let p = Number.isFinite(topP) ? topP : 1.0;
     let k = Number.isFinite(topK) ? topK : 20;
-
-    // Qwen3 docs: avoid greedy decoding for thinking mode.
-    if (thinkMode && t <= 0) {
-      t = 0.6;
-      p = 0.95;
-      k = 20;
-    }
-    return { temperature: t, topP: p, topK: k };
+    let r = Number.isFinite(repetitionPenalty) ? repetitionPenalty : 1.0;
+    void thinkMode;
+    t = Math.max(0.0, Math.min(1.5, t));
+    p = Math.max(0.05, Math.min(1.0, p));
+    k = Math.max(1, Math.round(k));
+    r = Math.max(1.0, Math.min(2.0, r));
+    return { temperature: t, topP: p, topK: k, repetitionPenalty: r };
   }
 }

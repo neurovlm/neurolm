@@ -5,6 +5,10 @@ This project is now **WASM-only at runtime**.
 - Inference runs in-browser via Rust/WASM (`neurolm/wasm` + `neurolm/site/wasm-worker.js`).
 - The frontend does **not** require `/api/*` Python endpoints.
 
+## Model Card Note
+
+The `Qwen3-0.6B-pubmed-neuroimaging-dapt` model was trained on approximately **1.2 million PubMed publications** related to **cognitive neuroscience**.
+
 ## Deploy to GitHub Pages
 
 Deployment guide and CI workflow details:
@@ -19,6 +23,14 @@ cd /home/rph/efficient_ai/neurolm
 ```
 
 Model file (`model-q4_k_m.gguf`) should be committed with Git LFS (`model/*.gguf`).
+
+Quick local build + test server:
+
+```bash
+cd /home/rph/efficient_ai/neurolm
+./tools/build_and_test_local.sh --build-only 8008
+./tools/build_and_test_local.sh 8008
+```
 
 ## Required static files
 
@@ -88,7 +100,7 @@ By default, intermediate `model-f16.gguf` is deleted after quantization. Set
 ```bash
 source ~/.bashrc
 cd /home/rph/efficient_ai/neurolm/wasm
-RUSTFLAGS='--cfg getrandom_backend="wasm_js"' wasm-pack build --target web --release --out-dir ../site/pkg
+RUSTFLAGS='--cfg getrandom_backend="wasm_js" -C target-feature=+simd128' wasm-pack build --target web --release --out-dir ../site/pkg
 ```
 
 ## Local static preview (no Python backend)
@@ -97,12 +109,12 @@ From `neurolm` root:
 
 ```bash
 cd /home/rph/efficient_ai/neurolm
-python3 -m http.server 8008
+./tools/build_and_test_local.sh 8008
 ```
 
 Open:
 
-- `http://127.0.0.1:8008/` (auto-redirects to `/site/`)
+- `http://127.0.0.1:8008/` (auto-redirects to `/chat/`)
 
 ## Notes
 

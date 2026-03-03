@@ -3,8 +3,8 @@
 export const memory: WebAssembly.Memory;
 export const __wbg_neurosession_free: (a: number, b: number) => void;
 export const neurosession_configure: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
-export const neurosession_generate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
-export const neurosession_generate_stream: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: any) => [number, number, number, number];
+export const neurosession_generate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number, number];
+export const neurosession_generate_stream: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: any) => [number, number, number, number];
 export const neurosession_load_model: (a: number, b: number, c: number) => [number, number];
 export const neurosession_new: () => number;
 export const __wbindgen_exn_store: (a: number) => void;
