@@ -1,4 +1,4 @@
-import { LocalNeuroEngine } from "./engine.js?v=20260302-09";
+import { LocalNeuroEngine } from "./engine.js?v=20260303-01";
 
 const els = {
   runtimePill: document.getElementById("runtime-pill"),
@@ -27,6 +27,10 @@ const els = {
   startupProgressTrack: document.getElementById("startup-progress-track"),
   startupProgressFill: document.getElementById("startup-progress-fill"),
   startupRetry: document.getElementById("startup-retry"),
+  startupStorageStatus: document.getElementById("startup-storage-status"),
+  startupStorageBtn: document.getElementById("startup-storage-btn"),
+  storageStatus: document.getElementById("storage-status"),
+  storagePersistBtn: document.getElementById("storage-persist-btn"),
   metrics: {
     tps: document.getElementById("m-tps"),
     ftl: document.getElementById("m-ftl"),
@@ -82,9 +86,11 @@ const THINK_TIME_LIMIT_MS = 60000;
 const STREAM_RENDER_INTERVAL_MS = 120;
 const THINK_ANSWER_SCAN_INTERVAL_MS = 180;
 const MOBILE_LAYOUT_QUERY = "(max-width: 1020px)";
+const REQUIRED_MODEL_CACHE_BYTES = 420 * 1024 * 1024;
 const conversationHistory = [];
 const textMeasureCanvas = document.createElement("canvas");
 const textMeasureCtx = textMeasureCanvas.getContext("2d");
+let storageRequestInFlight = false;
 
 function escapeHtml(text) {
   return String(text || "")
@@ -205,6 +211,140 @@ function formatMb(bytes) {
   const mb = Number(bytes) / (1024 * 1024);
   if (!Number.isFinite(mb) || mb <= 0) return "?";
   return mb.toFixed(mb < 100 ? 1 : 0);
+}
+
+function formatGb(bytes) {
+  const gb = Number(bytes) / (1024 * 1024 * 1024);
+  if (!Number.isFinite(gb) || gb <= 0) return "?";
+  return gb.toFixed(gb < 10 ? 2 : 1);
+}
+
+function setStorageStatusText(text) {
+  const message = String(text || "").trim();
+  if (!message) return;
+  if (els.storageStatus) {
+    els.storageStatus.textContent = message;
+  }
+  if (els.startupStorageStatus) {
+    els.startupStorageStatus.textContent = message;
+  }
+}
+
+function setStorageButtonsState({ disabled = false, label = null } = {}) {
+  const controls = [els.storagePersistBtn, els.startupStorageBtn];
+  for (const btn of controls) {
+    if (!btn) continue;
+    btn.disabled = disabled;
+    if (typeof label === "string" && label) {
+      btn.textContent = label;
+    }
+  }
+}
+
+async function getStorageSnapshot() {
+  if (!navigator.storage?.estimate) {
+    return { supported: false };
+  }
+
+  let usage = 0;
+  let quota = 0;
+  try {
+    const estimate = await navigator.storage.estimate();
+    usage = Number(estimate?.usage || 0);
+    quota = Number(estimate?.quota || 0);
+  } catch {
+    usage = 0;
+    quota = 0;
+  }
+
+  let persisted = null;
+  if (navigator.storage?.persisted) {
+    try {
+      persisted = await navigator.storage.persisted();
+    } catch {
+      persisted = null;
+    }
+  }
+
+  return {
+    supported: true,
+    usage,
+    quota,
+    free: Math.max(0, quota - usage),
+    persisted,
+  };
+}
+
+function renderStorageSnapshot(snapshot) {
+  if (!snapshot?.supported) {
+    setStorageStatusText("Offline cache permission unavailable in this browser.");
+    setStorageButtonsState({ disabled: true, label: "Unavailable" });
+    return;
+  }
+
+  const usageGb = formatGb(snapshot.usage || 0);
+  const quotaGb = formatGb(snapshot.quota || 0);
+  const freeBytes = Number(snapshot.free || 0);
+  const spaceNote =
+    freeBytes > 0
+      ? freeBytes >= REQUIRED_MODEL_CACHE_BYTES
+        ? `free ${formatGb(freeBytes)} GB`
+        : `low free space (${formatGb(freeBytes)} GB)`
+      : "free space unknown";
+
+  if (snapshot.persisted === true) {
+    setStorageStatusText(
+      `Offline cache permission granted (${spaceNote}, using ${usageGb}/${quotaGb} GB).`,
+    );
+    setStorageButtonsState({ disabled: true, label: "Offline Storage Enabled" });
+    return;
+  }
+
+  if (snapshot.persisted === false) {
+    setStorageStatusText(
+      `Offline cache permission not granted (${spaceNote}, using ${usageGb}/${quotaGb} GB).`,
+    );
+    setStorageButtonsState({ disabled: false, label: "Keep Model Offline" });
+    return;
+  }
+
+  setStorageStatusText(`Offline cache status unknown (${spaceNote}, using ${usageGb}/${quotaGb} GB).`);
+  setStorageButtonsState({ disabled: false, label: "Keep Model Offline" });
+}
+
+async function refreshStorageStatus() {
+  const snapshot = await getStorageSnapshot();
+  renderStorageSnapshot(snapshot);
+  return snapshot;
+}
+
+async function requestPersistentStorage() {
+  if (storageRequestInFlight) return;
+  storageRequestInFlight = true;
+  setStorageButtonsState({ disabled: true, label: "Requesting..." });
+  try {
+    if (!navigator.storage?.persist) {
+      setStorageStatusText("Offline cache permission unavailable in this browser.");
+      setStorageButtonsState({ disabled: true, label: "Unavailable" });
+      return;
+    }
+    const granted = await navigator.storage.persist();
+    const snapshot = await refreshStorageStatus();
+    if (granted) {
+      addMessage("assistant", "Offline cache permission granted by browser.");
+    } else if (snapshot?.supported) {
+      addMessage(
+        "assistant",
+        "Offline cache permission was not granted. Browser may evict the 300+MB model cache.",
+      );
+    }
+  } catch (err) {
+    console.error(err);
+    setStorageStatusText(`Offline cache permission request failed: ${String(err?.message || err)}`);
+    setStorageButtonsState({ disabled: false, label: "Keep Model Offline" });
+  } finally {
+    storageRequestInFlight = false;
+  }
 }
 
 function runtimeLabel(mode, phase = "active") {
@@ -1120,6 +1260,18 @@ async function boot() {
   drawSignal();
   updateSliderReadouts();
   syncControlsDrawerByViewport();
+  setStorageStatusText("Offline cache permission: checking browser support...");
+  if (els.storagePersistBtn) {
+    els.storagePersistBtn.addEventListener("click", () => {
+      requestPersistentStorage().catch(() => {});
+    });
+  }
+  if (els.startupStorageBtn) {
+    els.startupStorageBtn.addEventListener("click", () => {
+      requestPersistentStorage().catch(() => {});
+    });
+  }
+  refreshStorageStatus().catch(() => {});
   setStatus("Downloading model and initializing WASM CPU");
   els.sendBtn.disabled = true;
   setStartupVisible(true);
@@ -1129,10 +1281,6 @@ async function boot() {
     sub: "First load may take 1-3 minutes. Later loads should come from cache.",
     progress: null,
   });
-
-  if (navigator.storage?.persist) {
-    navigator.storage.persist().catch(() => {});
-  }
 
   if (els.startupRetry) {
     els.startupRetry.addEventListener("click", () => window.location.reload());
@@ -1224,6 +1372,7 @@ async function boot() {
     if (!busy) {
       els.sendBtn.disabled = false;
     }
+    refreshStorageStatus().catch(() => {});
     setStartupVisible(false);
   } catch (err) {
     console.error(err);

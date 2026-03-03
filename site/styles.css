@@ -143,6 +143,27 @@ body {
   font-size: 0.72rem;
 }
 
+.startup-storage {
+  margin: 10px auto 0;
+  max-width: min(500px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.startup-storage-status {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: #c3c3c3;
+}
+
+.startup-storage-btn {
+  padding: 7px 11px;
+}
+
 .startup-retry {
   margin-top: 12px;
 }
@@ -205,6 +226,35 @@ h1 {
   color: #e6e6e6;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(44, 44, 44, 0.88);
+}
+
+.runtime-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.storage-consent {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.storage-status {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: #b6b6b6;
+  text-align: right;
+  max-width: 360px;
+  line-height: 1.35;
+}
+
+.storage-action {
+  padding: 7px 11px;
+  font-size: 0.68rem;
 }
 
 .layout {
@@ -857,6 +907,22 @@ button:disabled {
 
   .topbar {
     margin: 0 auto 10px;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .runtime-wrap {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .storage-consent {
+    justify-content: flex-start;
+  }
+
+  .storage-status {
+    text-align: left;
+    max-width: none;
   }
 
   .layout {
