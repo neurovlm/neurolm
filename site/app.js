@@ -81,6 +81,7 @@ const THINK_TOKEN_CAP = 1028;
 const THINK_TIME_LIMIT_MS = 60000;
 const STREAM_RENDER_INTERVAL_MS = 120;
 const THINK_ANSWER_SCAN_INTERVAL_MS = 180;
+const MOBILE_LAYOUT_QUERY = "(max-width: 1020px)";
 const conversationHistory = [];
 const textMeasureCanvas = document.createElement("canvas");
 const textMeasureCtx = textMeasureCanvas.getContext("2d");
@@ -162,6 +163,15 @@ function setAssistantBody(frame, text, options = {}) {
 
 function setStatus(text) {
   els.runtimePill.textContent = text;
+}
+
+function isMobileLayout() {
+  return window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
+}
+
+function syncControlsDrawerByViewport() {
+  if (!els.controlsDrawer) return;
+  els.controlsDrawer.open = !isMobileLayout();
 }
 
 function setStartupVisible(visible) {
@@ -864,7 +874,7 @@ async function onSubmit(event) {
 
   const prompt = els.prompt.value.trim();
   if (!prompt) return;
-  if (els.controlsDrawer && window.matchMedia("(max-width: 1020px)").matches) {
+  if (els.controlsDrawer && isMobileLayout()) {
     els.controlsDrawer.open = false;
   }
 
@@ -1109,6 +1119,7 @@ async function onSubmit(event) {
 async function boot() {
   drawSignal();
   updateSliderReadouts();
+  syncControlsDrawerByViewport();
   setStatus("Downloading model and initializing WASM CPU");
   els.sendBtn.disabled = true;
   setStartupVisible(true);
@@ -1125,6 +1136,15 @@ async function boot() {
 
   if (els.startupRetry) {
     els.startupRetry.addEventListener("click", () => window.location.reload());
+  }
+  if (els.controlsDrawer) {
+    const mq = window.matchMedia(MOBILE_LAYOUT_QUERY);
+    const onViewportChange = () => syncControlsDrawerByViewport();
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", onViewportChange);
+    } else if (typeof mq.addListener === "function") {
+      mq.addListener(onViewportChange);
+    }
   }
 
   if (typeof engine.setInitProgressHandler === "function") {
