@@ -648,6 +648,21 @@ textarea:focus {
   gap: 11px;
 }
 
+.controls-drawer {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.controls-summary {
+  display: none;
+}
+
+/* Keep controls always visible on desktop. */
+.controls-drawer:not([open]) > .control-grid {
+  display: grid;
+}
+
 .control-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -866,26 +881,63 @@ button:disabled {
     min-height: 0;
     overflow-y: auto;
     padding-right: 8px;
+    padding-bottom: 10px;
     scrollbar-gutter: stable;
   }
 
   .composer {
-    position: sticky;
-    bottom: 0;
-    z-index: 4;
+    position: static;
     margin-top: auto;
-    padding-top: 8px;
-    background: linear-gradient(
-      180deg,
-      rgba(25, 25, 25, 0) 0%,
-      rgba(25, 25, 25, 0.94) 28%,
-      rgba(25, 25, 25, 0.94) 100%
-    );
+    padding-top: 6px;
+    background: none;
   }
 
   .composer-controls {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .controls-drawer {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    background: rgba(20, 20, 20, 0.82);
+    padding: 8px 10px;
+  }
+
+  .controls-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    list-style: none;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #d2d2d2;
+  }
+
+  .controls-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .controls-summary::after {
+    content: "Show";
+    color: #9fd9cb;
+    text-transform: none;
+    letter-spacing: 0.02em;
+  }
+
+  .controls-drawer[open] > .controls-summary::after {
+    content: "Hide";
+  }
+
+  .controls-drawer > .control-grid {
+    margin-top: 8px;
+  }
+
+  .controls-drawer:not([open]) > .control-grid {
+    display: none;
   }
 
   .control-grid {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NeuroLM Local</title>
-    <link rel="stylesheet" href="./styles.css?v=20260302-11" />
+    <link rel="stylesheet" href="./styles.css?v=20260302-12" />
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
     <script>
@@ -123,61 +123,64 @@
           ></textarea>
 
           <div class="composer-controls">
-            <div class="control-grid">
-              <section class="control-group">
-                <p class="control-group-title">Sampling</p>
-                <div class="slider-grid">
-                  <div class="slider-control">
-                    <div class="slider-head">
-                      <label for="temperature">Temp</label>
-                      <div class="slider-value" id="temperature-value">0.10</div>
+            <details class="controls-drawer">
+              <summary class="controls-summary">Sampling + Modes</summary>
+              <div class="control-grid">
+                <section class="control-group">
+                  <p class="control-group-title">Sampling</p>
+                  <div class="slider-grid">
+                    <div class="slider-control">
+                      <div class="slider-head">
+                        <label for="temperature">Temp</label>
+                        <div class="slider-value" id="temperature-value">0.10</div>
+                      </div>
+                      <input id="temperature" type="range" min="0" max="1.2" value="0.10" step="0.05" />
                     </div>
-                    <input id="temperature" type="range" min="0" max="1.2" value="0.10" step="0.05" />
-                  </div>
-                  <div class="slider-control">
-                    <div class="slider-head">
-                      <label for="top-p">Top P</label>
-                      <div class="slider-value" id="top-p-value">0.95</div>
+                    <div class="slider-control">
+                      <div class="slider-head">
+                        <label for="top-p">Top P</label>
+                        <div class="slider-value" id="top-p-value">0.95</div>
+                      </div>
+                      <input id="top-p" type="range" min="0.1" max="1.0" value="0.95" step="0.01" />
                     </div>
-                    <input id="top-p" type="range" min="0.1" max="1.0" value="0.95" step="0.01" />
-                  </div>
-                  <div class="slider-control">
-                    <div class="slider-head">
-                      <label for="repetition-penalty">Repeat Penalty</label>
-                      <div class="slider-value" id="repetition-penalty-value">1.10</div>
+                    <div class="slider-control">
+                      <div class="slider-head">
+                        <label for="repetition-penalty">Repeat Penalty</label>
+                        <div class="slider-value" id="repetition-penalty-value">1.10</div>
+                      </div>
+                      <input
+                        id="repetition-penalty"
+                        type="range"
+                        min="1.0"
+                        max="1.5"
+                        value="1.10"
+                        step="0.01"
+                      />
                     </div>
-                    <input
-                      id="repetition-penalty"
-                      type="range"
-                      min="1.0"
-                      max="1.5"
-                      value="1.10"
-                      step="0.01"
-                    />
-                  </div>
-                  <div class="slider-control">
-                    <div class="slider-head">
-                      <label for="max-new">Max Tokens</label>
-                      <div class="slider-value" id="max-new-value">8192</div>
+                    <div class="slider-control">
+                      <div class="slider-head">
+                        <label for="max-new">Max Tokens</label>
+                        <div class="slider-value" id="max-new-value">8192</div>
+                      </div>
+                      <input id="max-new" type="range" min="64" max="8192" value="8192" step="64" />
                     </div>
-                    <input id="max-new" type="range" min="64" max="8192" value="8192" step="64" />
                   </div>
-                </div>
-              </section>
-              <section class="control-group">
-                <p class="control-group-title">Modes</p>
-                <div class="toggle-grid">
-                  <label class="toggle-control history-toggle">
-                    <input id="history-mode" type="checkbox" checked />
-                    <span>Chat History</span>
-                  </label>
-                  <label class="toggle-control think-toggle">
-                    <input id="think-mode" type="checkbox" checked />
-                    <span>Think Mode (slower)</span>
-                  </label>
-                </div>
-              </section>
-            </div>
+                </section>
+                <section class="control-group">
+                  <p class="control-group-title">Modes</p>
+                  <div class="toggle-grid">
+                    <label class="toggle-control history-toggle">
+                      <input id="history-mode" type="checkbox" checked />
+                      <span>Chat History</span>
+                    </label>
+                    <label class="toggle-control think-toggle">
+                      <input id="think-mode" type="checkbox" checked />
+                      <span>Think Mode (slower)</span>
+                    </label>
+                  </div>
+                </section>
+              </div>
+            </details>
             <button id="send-btn" type="submit">Run Local Inference</button>
           </div>
           <p class="composer-hint">Enter to send · Shift+Enter for newline</p>
@@ -191,6 +194,6 @@
       </article>
     </template>
 
-    <script type="module" src="./app.js?v=20260302-10"></script>
+    <script type="module" src="./app.js?v=20260302-11"></script>
   </body>
 </html>

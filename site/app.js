@@ -6,6 +6,7 @@ const els = {
   messages: document.getElementById("messages"),
   form: document.getElementById("chat-form"),
   prompt: document.getElementById("prompt-input"),
+  controlsDrawer: document.querySelector(".controls-drawer"),
   sendBtn: document.getElementById("send-btn"),
   temperature: document.getElementById("temperature"),
   topP: document.getElementById("top-p"),
@@ -863,6 +864,9 @@ async function onSubmit(event) {
 
   const prompt = els.prompt.value.trim();
   if (!prompt) return;
+  if (els.controlsDrawer && window.matchMedia("(max-width: 1020px)").matches) {
+    els.controlsDrawer.open = false;
+  }
 
   setBusy(true);
   activeAbortController = new AbortController();
